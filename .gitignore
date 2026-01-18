@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Claude Code local settings
+.claude/
+
+# Build output
+dist/
+
+# Data files (generated at runtime)
+data/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript cache
+*.tsbuildinfo
+*.png
+!public/og-image.png
+bin/vibecraft
+scripts/test-*.sh
+todo.txt
