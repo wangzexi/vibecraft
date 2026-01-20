@@ -6,8 +6,7 @@
  */
 
 import { eventBus } from '../EventBus'
-import type { PostToolUseEvent } from '../../../shared/types'
-import type { BashToolInput } from '../../../shared/types'
+import type { EventMessagePartUpdated, ToolPart } from '@opencode-ai/sdk'
 
 // Command patterns for detecting specific bash operations
 const PATTERNS = {
@@ -24,12 +23,23 @@ let recentReadTimer: ReturnType<typeof setTimeout> | null = null
 /**
  * Pick an animation based on what just happened
  */
-function pickAnimation(event: PostToolUseEvent): string | null {
-  const { tool, toolInput, success, duration } = event
+function pickAnimation(toolPart: ToolPart): string | null {
+  const { tool, state } = toolPart
+  const success = state.status === 'completed'
+  const input = state.input as Record<string, unknown>
+  
+  // Calculate duration if available
+  let duration: number | undefined
+  if (state.status === 'completed' && 'time' in state) {
+    const time = state.time as { start: number; end?: number }
+    if (time.end) {
+      duration = time.end - time.start
+    }
+  }
 
   // Bash command patterns - most specific first
   if (tool === 'Bash') {
-    const cmd = (toolInput as unknown as BashToolInput).command || ''
+    const cmd = (input.command as string) || ''
 
     // Git operations
     if (PATTERNS.gitCommit.test(cmd) && success) return 'victoryDance'
@@ -75,11 +85,17 @@ function pickAnimation(event: PostToolUseEvent): string | null {
 }
 
 export function registerAnimationHandlers(): void {
-  eventBus.on('post_tool_use', (event: PostToolUseEvent, ctx) => {
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     // Need a character to animate
     if (!ctx.session?.claude) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'completed' && toolPart.state.status !== 'error') return
 
-    const animation = pickAnimation(event)
+    const animation = pickAnimation(toolPart)
     if (animation) {
       // Small delay so character settles into idle first
       setTimeout(() => {

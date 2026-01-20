@@ -1,32 +1,23 @@
-/**
- * Zone Status Event Handlers
- *
- * Handles zone status updates (working, attention, etc.)
- * and attention states for questions and completion.
- */
-
 import { eventBus } from '../EventBus'
-import type { StopEvent, UserPromptSubmitEvent } from '../../../shared/types'
+import type { EventSessionStatus } from '@opencode-ai/sdk'
 
 /**
  * Register zone status event handlers
  */
 export function registerZoneHandlers(): void {
-  // Set attention state when Claude stops (finished work)
-  eventBus.on('stop', (event: StopEvent, ctx) => {
+  // Set attention state when session status changes
+  eventBus.on('session.status', (event: EventSessionStatus, ctx) => {
     if (!ctx.session || !ctx.scene) return
 
-    // Set finished attention - agent completed its work
-    ctx.scene.setZoneAttention(event.sessionId, 'finished')
-    ctx.scene.setZoneStatus(event.sessionId, 'attention')  // Red glow
-  })
-
-  // Clear attention and set working when user submits prompt
-  eventBus.on('user_prompt_submit', (event: UserPromptSubmitEvent, ctx) => {
-    if (!ctx.session || !ctx.scene) return
-
-    // Clear attention - user is now engaged
-    ctx.scene.clearZoneAttention(event.sessionId)
-    ctx.scene.setZoneStatus(event.sessionId, 'working')  // Cyan glow
+    const status = event.properties.status
+    
+    // Set zone status based on session status
+    if (status.type === 'idle') {
+      ctx.scene.setZoneAttention(event.properties.sessionID, 'finished')
+      ctx.scene.setZoneStatus(event.properties.sessionID, 'attention')
+    } else if (status.type === 'busy') {
+      ctx.scene.clearZoneAttention(event.properties.sessionID)
+      ctx.scene.setZoneStatus(event.properties.sessionID, 'working')
+    }
   })
 }

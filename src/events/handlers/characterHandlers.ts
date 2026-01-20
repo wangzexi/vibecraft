@@ -8,18 +8,24 @@
 import { eventBus } from '../EventBus'
 import { soundManager } from '../../audio'
 import { getToolContext } from '../../utils/ToolUtils'
-import { getStationForTool } from '../../../shared/types'
-import type { PreToolUseEvent, PostToolUseEvent, StopEvent, UserPromptSubmitEvent } from '../../../shared/types'
+import { getStationForTool } from '../../types'
+import type { EventMessagePartUpdated, EventSessionStatus, ToolPart } from '@opencode-ai/sdk'
 
 /**
  * Register character movement event handlers
  */
 export function registerCharacterHandlers(): void {
   // Move character to station when tool starts
-  eventBus.on('pre_tool_use', (event: PreToolUseEvent, ctx) => {
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     if (!ctx.session) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'running') return
 
-    const station = getStationForTool(event.tool)
+    const station = getStationForTool(toolPart.tool)
 
     // Move character to station (skip 'center' - those are MCP browser tools)
     if (station !== 'center') {
@@ -35,19 +41,25 @@ export function registerCharacterHandlers(): void {
 
     // Set context text above station
     if (ctx.scene && station !== 'center') {
-      const context = getToolContext(event.tool, event.toolInput)
+      const context = getToolContext(toolPart.tool, toolPart.state.input)
       if (context) {
-        ctx.scene.setStationContext(station, context, event.sessionId)
+        ctx.scene.setStationContext(station, context, toolPart.sessionID)
       }
 
       // Pulse station ring to highlight activity
-      ctx.scene.pulseStation(event.sessionId, station)
+      ctx.scene.pulseStation(toolPart.sessionID, station)
     }
   })
 
-  // Set idle state when tool completes (if not walking)
-  eventBus.on('post_tool_use', (_event: PostToolUseEvent, ctx) => {
+  // Set idle state when tool completes
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     if (!ctx.session) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'completed' && toolPart.state.status !== 'error') return
 
     // Only set idle if character isn't walking
     if (ctx.session.claude.state !== 'walking') {
@@ -55,8 +67,8 @@ export function registerCharacterHandlers(): void {
     }
   })
 
-  // Move character back to center when stopped
-  eventBus.on('stop', (event: StopEvent, ctx) => {
+  // Move character back to center when session status changes
+  eventBus.on('session.status', (event: EventSessionStatus, ctx) => {
     if (!ctx.session || !ctx.scene) return
 
     // Move to zone center
@@ -66,12 +78,6 @@ export function registerCharacterHandlers(): void {
     }
 
     // Clear station context labels
-    ctx.scene.clearAllContexts(event.sessionId)
-  })
-
-  // Set thinking state when user submits prompt
-  eventBus.on('user_prompt_submit', (_event: UserPromptSubmitEvent, ctx) => {
-    if (!ctx.session) return
-    ctx.session.claude.setState('thinking')
+    ctx.scene.clearAllContexts(event.properties.sessionID)
   })
 }

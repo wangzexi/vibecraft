@@ -7,7 +7,7 @@
 
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import type { StationType, TextTile } from '../../shared/types'
+import type { StationType } from '../types'
 import { HexGrid } from '../utils/HexGrid'
 import { soundManager } from '../audio'
 import { ZoneNotifications, type NotificationOptions } from './ZoneNotifications'
@@ -202,7 +202,6 @@ export class WorkshopScene {
   // Text tiles (grid labels)
   private textTileSprites = new Map<string, {
     sprite: THREE.Sprite
-    tile: TextTile
   }>()
 
   // Painted hexes (draw mode) - stores mesh, height, and color
@@ -1464,115 +1463,6 @@ export class WorkshopScene {
   /**
    * Set all text tiles (called when receiving tiles from server)
    */
-  setTextTiles(tiles: TextTile[]): void {
-    // Remove tiles that no longer exist
-    const newIds = new Set(tiles.map(t => t.id))
-    for (const [id] of this.textTileSprites) {
-      if (!newIds.has(id)) {
-        this.removeTextTile(id)
-      }
-    }
-
-    // Add or update tiles
-    for (const tile of tiles) {
-      if (this.textTileSprites.has(tile.id)) {
-        this.updateTextTile(tile)
-      } else {
-        this.addTextTile(tile)
-      }
-    }
-  }
-
-  /**
-   * Add a text tile to the scene
-   */
-  addTextTile(tile: TextTile): void {
-    const sprite = this.createTextTileSprite(tile.text, tile.color)
-
-    // Position at hex center, accounting for painted hex height
-    const { x, z } = this.hexGrid.axialToCartesian(tile.position)
-    const hexHeight = this.getPaintedHexHeight(tile.position)
-    sprite.position.set(x, 0.5 + hexHeight, z)
-
-    this.scene.add(sprite)
-    this.textTileSprites.set(tile.id, { sprite, tile })
-  }
-
-  /**
-   * Get the height of a painted hex at a position (0 if not painted)
-   */
-  getPaintedHexHeight(hex: { q: number; r: number }): number {
-    const key = `${hex.q},${hex.r}`
-    const data = this.paintedHexes.get(key)
-    return data?.height ?? 0
-  }
-
-  /**
-   * Update an existing text tile
-   */
-  updateTextTile(tile: TextTile): void {
-    const entry = this.textTileSprites.get(tile.id)
-    if (!entry) return
-
-    // Update position if changed (including height for painted hexes)
-    const { x, z } = this.hexGrid.axialToCartesian(tile.position)
-    const hexHeight = this.getPaintedHexHeight(tile.position)
-    entry.sprite.position.set(x, 0.5 + hexHeight, z)
-
-    // Update text/color if changed
-    if (entry.tile.text !== tile.text || entry.tile.color !== tile.color) {
-      const material = entry.sprite.material as THREE.SpriteMaterial
-      if (material.map) {
-        material.map.dispose()
-      }
-      const { texture, lineCount } = this.createTextTileTexture(tile.text, tile.color)
-      material.map = texture
-      material.needsUpdate = true
-
-      // Update scale - maintain 2:1 aspect ratio to avoid distortion
-      const baseWidth = 16
-      const baseHeight = 8
-      const scale = 1 + (lineCount - 1) * 0.3
-      entry.sprite.scale.set(baseWidth * scale, baseHeight * scale, 1)
-    }
-
-    entry.tile = tile
-  }
-
-  /**
-   * Remove a text tile from the scene
-   */
-  removeTextTile(tileId: string): void {
-    const entry = this.textTileSprites.get(tileId)
-    if (!entry) return
-
-    this.scene.remove(entry.sprite)
-    const material = entry.sprite.material as THREE.SpriteMaterial
-    if (material.map) {
-      material.map.dispose()
-    }
-    material.dispose()
-    this.textTileSprites.delete(tileId)
-  }
-
-  /**
-   * Get text tile at a hex position (for click detection)
-   */
-  getTextTileAtHex(hex: { q: number; r: number }): TextTile | null {
-    for (const [, entry] of this.textTileSprites) {
-      if (entry.tile.position.q === hex.q && entry.tile.position.r === hex.r) {
-        return entry.tile
-      }
-    }
-    return null
-  }
-
-  /**
-   * Get all text tiles
-   */
-  getTextTiles(): TextTile[] {
-    return Array.from(this.textTileSprites.values()).map(e => e.tile)
-  }
 
   /**
    * Create a text tile sprite
@@ -3144,7 +3034,6 @@ export class WorkshopScene {
     this.paintedHexes.set(key, { mesh, height: newHeight, color })
 
     // Update any text tile at this position to match new height
-    this.updateTextTileAtHex(hex)
 
     // Visual feedback when stacking (height increased in 3D mode)
     if (existing && existing.color === color && newHeight > existing.height && drawMode.is3DMode()) {
@@ -3157,17 +3046,6 @@ export class WorkshopScene {
   /**
    * Update text tile position at a hex (after height change)
    */
-  private updateTextTileAtHex(hex: { q: number; r: number }): void {
-    for (const [, entry] of this.textTileSprites) {
-      if (entry.tile.position.q === hex.q && entry.tile.position.r === hex.r) {
-        const { x, z } = this.hexGrid.axialToCartesian(hex)
-        const height = this.getPaintedHexHeight(hex)
-        entry.sprite.position.set(x, 0.5 + height, z)
-        break
-      }
-    }
-  }
-
   /**
    * Spawn visual effect when hex height increases (stacking feedback)
    */
@@ -3230,7 +3108,6 @@ export class WorkshopScene {
       ;(data.mesh.material as THREE.MeshStandardMaterial).dispose()
       this.paintedHexes.delete(key)
       // Update any text tile at this position (back to floor level)
-      this.updateTextTileAtHex(hex)
     }
   }
 

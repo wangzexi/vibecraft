@@ -11,21 +11,27 @@ import {
   formatCommandResult,
   formatSearchResult,
 } from '../../scene/ZoneNotifications'
-import type { PostToolUseEvent } from '../../../shared/types'
-import { getStationForTool } from '../../../shared/types'
+import type { EventMessagePartUpdated, ToolPart } from '@opencode-ai/sdk'
+import { getStationForTool } from '../../types'
 
 /**
  * Register notification-related event handlers
  */
 export function registerNotificationHandlers(): void {
   // Tool completion notifications
-  eventBus.on('post_tool_use', (event: PostToolUseEvent, ctx) => {
-    if (!event.success || !ctx.scene) return
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
+    if (!ctx.scene) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'completed') return
 
-    const input = event.toolInput as Record<string, unknown>
+    const input = toolPart.state.input as Record<string, unknown>
     let notificationText: string | null = null
 
-    switch (event.tool) {
+    switch (toolPart.tool) {
       case 'Edit': {
         const filePath = input.file_path as string | undefined
         if (filePath) {
@@ -115,14 +121,14 @@ export function registerNotificationHandlers(): void {
 
     // Show notification using zone notifications system
     if (notificationText) {
-      ctx.scene.zoneNotifications.showForTool(event.sessionId, event.tool, notificationText)
+      ctx.scene.zoneNotifications.showForTool(toolPart.sessionID, toolPart.tool, notificationText)
 
       // Also update station panels with tool history
-      const station = getStationForTool(event.tool)
+      const station = getStationForTool(toolPart.tool)
       if (station !== 'center') {
-        ctx.scene.stationPanels.addToolUse(event.sessionId, station, {
+        ctx.scene.stationPanels.addToolUse(toolPart.sessionID, station, {
           text: notificationText,
-          success: event.success,
+          success: true,
         })
       }
     }

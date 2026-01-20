@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three'
-import type { StationType } from '../../shared/types'
+import type { StationType } from '../types'
 import type { WorkshopScene } from '../scene/WorkshopScene'
 import type { ICharacter, CharacterOptions, CharacterState } from './ICharacter'
 import {

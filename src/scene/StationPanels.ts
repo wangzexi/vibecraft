@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three'
-import type { StationType } from '../../shared/types'
+import type { StationType } from '../types'
 
 export interface ToolHistoryItem {
   text: string // "npm test" or "config.ts"

@@ -8,7 +8,7 @@
 
 import { eventBus } from '../EventBus'
 import { soundManager, type SoundPlayOptions } from '../../audio'
-import type { PreToolUseEvent, PostToolUseEvent, BashToolInput } from '../../../shared/types'
+import type { EventMessagePartUpdated, ToolPart } from '@opencode-ai/sdk'
 
 /**
  * Check if a Bash command is a git commit
@@ -33,65 +33,61 @@ function getSpatialOptions(ctx: { session: { id: string } | null }): SoundPlayOp
  * Register all sound-related event handlers
  */
 export function registerSoundHandlers(): void {
-  // Tool start sounds (with special handling for git commit)
-  eventBus.on('pre_tool_use', (event: PreToolUseEvent, ctx) => {
+  // Tool start sounds (when message part is updated with running tool)
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     if (!ctx.soundEnabled) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'running') return
+    
     const spatial = getSpatialOptions(ctx)
+    const toolName = toolPart.tool
 
     // Special sound for git commit (global, no spatial)
-    if (event.tool === 'Bash') {
-      const input = event.toolInput as unknown as BashToolInput
+    if (toolName === 'Bash') {
+      const input = toolPart.state.input as { command?: string }
       if (input.command && isGitCommit(input.command)) {
         soundManager.play('git_commit')  // Global sound, no spatial
         return  // Skip normal bash sound
       }
     }
 
-    soundManager.playTool(event.tool, spatial)
-  })
-
-  // Subagent spawn sound (Task tool start)
-  eventBus.on('pre_tool_use', (event: PreToolUseEvent, ctx) => {
-    if (!ctx.soundEnabled) return
-    if (event.tool === 'Task') {
-      const spatial = getSpatialOptions(ctx)
+    // Spawn sound for Task tool
+    if (toolName === 'Task') {
       soundManager.play('spawn', spatial)
     }
+
+    soundManager.playTool(toolName, spatial)
   })
 
   // Tool completion sounds (success/error)
-  eventBus.on('post_tool_use', (event: PostToolUseEvent, ctx) => {
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     if (!ctx.soundEnabled) return
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'completed' && toolPart.state.status !== 'error') return
+    
     const spatial = getSpatialOptions(ctx)
-    soundManager.playResult(event.success, spatial)
-  })
+    const success = toolPart.state.status === 'completed'
+    
+    soundManager.playResult(success, spatial)
 
-  // Subagent despawn sound
-  eventBus.on('post_tool_use', (event: PostToolUseEvent, ctx) => {
-    if (!ctx.soundEnabled) return
-    if (event.tool === 'Task') {
-      const spatial = getSpatialOptions(ctx)
+    // Despawn sound for Task tool
+    if (toolPart.tool === 'Task') {
       soundManager.play('despawn', spatial)
     }
   })
 
-  // Stop/completion sound
-  eventBus.on('stop', (_event, ctx) => {
+  // Session status changes
+  eventBus.on('session.status', (_event, ctx) => {
     if (!ctx.soundEnabled) return
     const spatial = getSpatialOptions(ctx)
     soundManager.play('stop', spatial)
-  })
-
-  // Prompt received sound
-  eventBus.on('user_prompt_submit', (_event, ctx) => {
-    if (!ctx.soundEnabled) return
-    const spatial = getSpatialOptions(ctx)
-    soundManager.play('prompt', spatial)
-  })
-
-  // Notification sound (global, no spatial)
-  eventBus.on('notification', (_event, ctx) => {
-    if (!ctx.soundEnabled) return
-    soundManager.play('notification')  // Global sound, no spatial
   })
 }

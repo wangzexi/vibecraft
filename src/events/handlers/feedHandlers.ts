@@ -1,28 +1,26 @@
-/**
- * Feed/UI Event Handlers
- *
- * Handles thinking indicator visibility in the activity feed.
- */
-
 import { eventBus } from '../EventBus'
-import type { PreToolUseEvent, StopEvent } from '../../../shared/types'
+import type { EventMessagePartUpdated, EventSessionStatus, ToolPart } from '@opencode-ai/sdk'
 
 /**
  * Register feed-related event handlers
  */
 export function registerFeedHandlers(): void {
   // Hide thinking indicator when tool starts
-  eventBus.on('pre_tool_use', (_event: PreToolUseEvent, ctx) => {
+  eventBus.on('message.part.updated', (event: EventMessagePartUpdated, ctx) => {
     if (!ctx.session || !ctx.feedManager) return
-    ctx.feedManager.hideThinking(_event.sessionId)
+    
+    const part = event.properties.part
+    if (part.type !== 'tool') return
+    
+    const toolPart = part as ToolPart
+    if (toolPart.state.status !== 'running') return
+    
+    ctx.feedManager.hideThinking(toolPart.sessionID)
   })
 
-  // Hide thinking indicator on stop
-  eventBus.on('stop', (event: StopEvent, ctx) => {
+  // Hide thinking indicator on session status change
+  eventBus.on('session.status', (event: EventSessionStatus, ctx) => {
     if (!ctx.feedManager) return
-    ctx.feedManager.hideThinking(event.sessionId)
+    ctx.feedManager.hideThinking(event.properties.sessionID)
   })
-
-  // NOTE: showThinking for user_prompt_submit is handled in main.ts
-  // AFTER feedManager.add() to ensure correct ordering in the feed
 }
